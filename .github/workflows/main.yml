@@ -31,12 +31,33 @@ jobs:
       - name: Lint
         run: yarn lint
 
-      - uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: './docker-compose.yml'
+      - name: Verify Docker Compose
+        run: docker compose version
+
+      - name: Start Docker Compose services
+        run: docker compose -f ./docker-compose.yml up -d
+
+      - name: Wait for ArangoDB to be ready
+        run: |
+          timeout=30
+          elapsed=0
+          while ! curl -f http://localhost:8529/_api/version > /dev/null 2>&1; do
+            if [ $elapsed -ge $timeout ]; then
+              echo "ArangoDB failed to start within $timeout seconds"
+              exit 1
+            fi
+            echo "Waiting for ArangoDB to start..."
+            sleep 2
+            elapsed=$((elapsed + 2))
+          done
+          echo "ArangoDB is ready"
 
       - name: Test
         run: yarn test
+
+      - name: Stop Docker Compose services
+        if: always()
+        run: docker compose -f ./docker-compose.yml down
 
       - name: Build
         run: yarn build
